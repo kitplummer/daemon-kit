@@ -95,6 +95,16 @@ module DaemonKit
 
         response
       end
+      
+      def reply_via_stomp( destination_queue, response )
+        DaemonKit.logger.debug("Replying to engine via Stomp (#{destination_queue}) with #{response.inspect}")
+        stomp = Stomp.new.client
+        
+        stomp.publish( destination_queue, response.to_json, :persistent => true )
+        
+        stomp.close
+        response
+      end
 
       def parse( workitem )
         begin

@@ -37,6 +37,7 @@ module DaemonKit
       @participants = {}
       @runtime_queues = []
       @amqp_reply_queue = 'ruote_workitems'
+      @stomp_reply_queue = '/queue/ruote_workitems'
 
       @configuration = Config.load('ruote')
     end
@@ -50,7 +51,7 @@ module DaemonKit
     end
 
     # Enable the use of a specific transport for workitems. Can be :amqp to use
-    # the AMQPParticipant/AMQPListener pair in ruote.
+    # the AMQPParticipant/AMQPListener pair in ruote. Or, :stomp.
     def use( transport )
       @transports << transport
     end
@@ -59,6 +60,10 @@ module DaemonKit
     # to (defaults to 'ruote_workitems')
     def amqp_reply_queue( name )
       @amqp_reply_queue = name
+    end
+
+    def stomp_reply_queue( name )
+      @stomp_reply_queue = name
     end
 
     # Register classes as pseudo-participants. Two styles of registration are
@@ -86,6 +91,7 @@ module DaemonKit
     # Run the participants
     def run(&block)
       run_amqp! if @transports.include?( :amqp )
+      run_stomp! if @transports.include?( :stomp )
     end
 
     # Subscribe to additional queues not specified in ruote.yml
@@ -94,6 +100,35 @@ module DaemonKit
     end
 
     private
+
+    def run_stomp!
+      #@config = DaemonKit::Config.load('stomp').to_h( true )
+      #DaemonKit.logger.debug("Stomp::Client.new(#{@config.inspect})")
+      stomp = Stomp.new.client
+      queues = @configuration['stomp']['queues'].to_a | @runtime_queues
+      queues.each do |q|
+
+        #cmdq = mq.queue( q, :durable => true )
+        EventMachine::run do
+          DaemonKit.logger.debug("Subscribed to #{q} for workitems")
+
+          stomp.subscribe( q, {  :ack => :client } ) do |message|
+
+            #cmdq.subscribe( :ack => true ) do |header, message|
+            safely do
+              DaemonKit.logger.debug("Received workitem: #{message.body} - header: #{message.headers}")
+
+              RuoteWorkitem.process( :stomp, @stomp_reply_queue, message.body )
+              
+              DaemonKit.logger.debug("Processed workitem.")
+              
+              stomp.acknowledge(message)
+            end
+          end
+
+        end
+      end
+    end
 
     def run_amqp!
       AMQP.run do
@@ -111,7 +146,6 @@ module DaemonKit
               RuoteWorkitem.process( :amqp, @amqp_reply_queue, message )
 
               DaemonKit.logger.debug("Processed workitem.")
-
               header.ack
             end
           end
@@ -122,10 +156,10 @@ module DaemonKit
     # Shamelessly lifted from the ActiveSupport inflector
     def underscore(camel_cased_word)
       camel_cased_word.to_s.gsub(/::/, '/').
-        gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2').
-        gsub(/([a-z\d])([A-Z])/,'\1_\2').
-        tr("-", "_").
-        downcase
+      gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2').
+      gsub(/([a-z\d])([A-Z])/,'\1_\2').
+      tr("-", "_").
+      downcase
     end
   end
 

@@ -15,6 +15,7 @@ module DaemonKit
     autoload :TestUnitGenerator,    'generators/daemon_kit/test_unit/test_unit_generator'
     autoload :RuoteGenerator,       'generators/daemon_kit/ruote/ruote_generator'
     autoload :XmppGenerator,        'generators/daemon_kit/xmpp/xmpp_generator'
+    autoload :RuoteStompGenerator,  'generators/daemon_kit/ruote_stomp/ruote_stomp_generator'
 
     class << self
 
